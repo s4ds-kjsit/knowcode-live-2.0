@@ -1,7 +1,9 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Award, BarChart3, Home, Upload } from 'lucide-react';
-import { cn } from '../lib/utils';
+import React, { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Award, BarChart3, Home, Upload, Menu, X, LogOut } from "lucide-react";
+import { cn } from "../lib/utils";
+import { auth } from "../firebase";
+import { useAuthState } from "react-firebase-hooks/auth";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,65 +11,103 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [user, loading] = useAuthState(auth);
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Submit Project', href: '/submit', icon: Upload },
-    { name: 'Judge Projects', href: '/judge', icon: Award },
-    { name: 'Reports', href: '/reports', icon: BarChart3 },
+    { name: "Dashboard", href: "/dashboard", icon: Home },
+    { name: "Submit Project", href: "/submit", icon: Upload },
+    { name: "Judge Projects", href: "/judge", icon: Award },
+    { name: "Reports", href: "/reports", icon: BarChart3 },
   ];
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="flex h-screen">
-        {/* Sidebar */}
-        <div className="hidden md:flex md:flex-shrink-0">
-          <div className="flex w-64 flex-col">
-            <div className="flex min-h-0 flex-1 flex-col border-r border-gray-200 bg-white">
-              <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
-                <div className="flex flex-shrink-0 items-center px-4">
-                  <Award className="h-8 w-8 text-blue-600" />
-                  <span className="ml-2 text-xl font-bold text-gray-900">
-                    HackJudge
-                  </span>
-                </div>
-                <nav className="mt-8 flex-1 space-y-1 px-2">
-                  {navigation.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.name}
-                        to={item.href}
-                        className={cn(
-                          location.pathname === item.href
-                            ? 'bg-blue-50 text-blue-600'
-                            : 'text-gray-600 hover:bg-gray-50',
-                          'group flex items-center rounded-md px-2 py-2 text-sm font-medium'
-                        )}
-                      >
-                        <Icon
-                          className={cn(
-                            location.pathname === item.href
-                              ? 'text-blue-600'
-                              : 'text-gray-400 group-hover:text-gray-500',
-                            'mr-3 h-5 w-5 flex-shrink-0'
-                          )}
-                        />
-                        {item.name}
-                      </Link>
-                    );
-                  })}
-                </nav>
-              </div>
-            </div>
-          </div>
-        </div>
+  const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
 
-        {/* Main content */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+  const handleSignOut = async () => {
+    try {
+      await auth.signOut();
+      navigate("/");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  if (loading) return <div>Loading...</div>;
+
+  if (!user) {
+    navigate("/"); // Redirect to login page if not authenticated
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <header className="bg-gray-800 text-white p-4 flex justify-between items-center">
+        <h1 className="text-lg font-bold">Judgehack</h1>
+        <div className="flex items-center space-x-4">
+          <nav className="hidden lg:flex space-x-4">
+            {navigation.map((item) => (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={cn(
+                  "flex items-center space-x-2 px-3 py-2 rounded-md text-sm",
+                  location.pathname === item.href
+                    ? "bg-gray-700"
+                    : "hover:bg-gray-700"
+                )}
+              >
+                <item.icon className="w-4 h-4" />
+                <span>{item.name}</span>
+              </Link>
+            ))}
+          </nav>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center space-x-2 bg-red-500 px-3 py-2 rounded-md text-sm hover:bg-red-600"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+          <button
+            className="lg:hidden block text-white"
+            onClick={toggleMobileMenu}
+            aria-label="Toggle navigation menu"
+          >
+            {isMobileMenuOpen ? <X /> : <Menu />}
+          </button>
         </div>
-      </div>
+      </header>
+
+      {isMobileMenuOpen && (
+        <nav className="lg:hidden bg-gray-800 text-white p-4">
+          {navigation.map((item) => (
+            <Link
+              key={item.name}
+              to={item.href}
+              className={cn(
+                "block px-3 py-2 rounded-md text-sm mb-2",
+                location.pathname === item.href
+                  ? "bg-gray-700"
+                  : "hover:bg-gray-700"
+              )}
+              onClick={toggleMobileMenu}
+            >
+              <item.icon className="w-4 h-4 inline-block mr-2" />
+              {item.name}
+            </Link>
+          ))}
+          <button
+            onClick={handleSignOut}
+            className="w-full bg-red-500 px-3 py-2 rounded-md text-sm hover:bg-red-600"
+          >
+            <LogOut className="w-4 h-4 inline-block mr-2" />
+            Sign Out
+          </button>
+        </nav>
+      )}
+
+      <main className="flex-1 p-4">{children}</main>
     </div>
   );
 }

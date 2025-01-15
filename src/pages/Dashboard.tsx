@@ -1,9 +1,96 @@
-import React from 'react';
-import { useStore } from '../store';
-import { Award, Users, Timer, Trophy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Award, Users, Trophy } from 'lucide-react';
+import { db, auth } from '../firebase';
+import { collection, getDocs } from 'firebase/firestore';
 
 export function Dashboard() {
-  const { projects, judges, scores } = useStore();
+  const [projects, setProjects] = useState([]);
+  const [judges, setJudges] = useState([]);
+  const [scores, setScores] = useState([]);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const fetchUser = () => {
+      const currentUser = auth.currentUser;
+      setUser(currentUser);
+    };
+
+    fetchUser();
+  }, []);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const projectCollection = collection(db, 'projects');
+        const projectSnapshot = await getDocs(projectCollection);
+        const projectList = projectSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setProjects(projectList);
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  useEffect(() => {
+    const fetchJudges = async () => {
+      try {
+        const judgeCollection = collection(db, 'judges');
+        const judgeSnapshot = await getDocs(judgeCollection);
+        const activeJudges = judgeSnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }))
+          .filter((judge) => judge.active); // Only include active judges
+        setJudges(activeJudges);
+      } catch (error) {
+        console.error('Error fetching judges:', error);
+      }
+    };
+
+    fetchJudges();
+  }, []);
+
+  useEffect(() => {
+    const fetchScores = async () => {
+      try {
+        const scoreCollection = collection(db, 'ratings');
+        const scoreSnapshot = await getDocs(scoreCollection);
+        const scoreList = scoreSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setScores(scoreList);
+      } catch (error) {
+        console.error('Error fetching scores:', error);
+      }
+    };
+
+    fetchScores();
+  }, []);
+
+  const groupScoresByProject = (scores) => {
+    const grouped = scores.reduce((acc, score) => {
+      if (!acc[score.projectId]) {
+        acc[score.projectId] = [];
+      }
+      acc[score.projectId].push(score);
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([projectId, scores]) => ({
+      projectId,
+      totalScore: scores.reduce((sum, score) => sum + score.score, 0),
+      criteria: scores.length,
+    }));
+  };
+
+  const evaluationsComplete = groupScoresByProject(scores).length;
 
   const stats = [
     {
@@ -20,23 +107,25 @@ export function Dashboard() {
     },
     {
       name: 'Evaluations Complete',
-      value: scores.length,
+      value: evaluationsComplete,
       icon: Award,
       color: 'bg-purple-500',
     },
-    {
-      name: 'Time Remaining',
-      value: '2h 30m',
-      icon: Timer,
-      color: 'bg-yellow-500',
-    },
   ];
+
+  const recentScores = groupScoresByProject(scores);
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-      
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
+      {user && (
+        <div className="mt-4 text-sm text-gray-600">
+          Logged in as: <span className="font-semibold">{user.email}</span>
+        </div>
+      )}
+
+      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -72,7 +161,22 @@ export function Dashboard() {
         <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
         <div className="mt-4 overflow-hidden rounded-lg bg-white shadow">
           <div className="p-6">
-            <p className="text-gray-500">No recent activity</p>
+            {recentScores.length > 0 ? (
+              <ul className="divide-y divide-gray-200">
+                {recentScores.map((score) => (
+                  <li key={score.projectId} className="py-4">
+                    <p className="text-sm text-gray-900">
+                      Project Title: <span className="font-medium">{score.projectId}</span>
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Total Score: {score.totalScore} ({score.criteria} Criteria)
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">No recent activity</p>
+            )}
           </div>
         </div>
       </div>

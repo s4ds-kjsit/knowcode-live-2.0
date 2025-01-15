@@ -1,31 +1,85 @@
-import React from 'react';
-import { useStore } from '../store';
+import React, { useEffect, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase"; // Ensure the path to your Firebase config is correct
 
 export function Reports() {
-  const { projects, scores, criteria } = useStore();
+  const [projects, setProjects] = useState([]);
+  const [criteria, setCriteria] = useState([]);
+  const [ratings, setRatings] = useState([]);
 
+  // Fetch projects from Firestore
+  const fetchProjects = async () => {
+    const projectCollection = collection(db, "projects");
+    const projectSnapshot = await getDocs(projectCollection);
+    const projectList = projectSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    setProjects(projectList);
+  };
+
+  // Fetch criteria from Firestore
+  const fetchCriteria = async () => {
+    const criteriaCollection = collection(db, "criteria");
+    const criteriaSnapshot = await getDocs(criteriaCollection);
+    const criteriaList = criteriaSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    setCriteria(criteriaList);
+  };
+
+  // Fetch ratings from Firestore
+  const fetchRatings = async () => {
+    const ratingsCollection = collection(db, "ratings");
+    const ratingsSnapshot = await getDocs(ratingsCollection);
+    const ratingsList = ratingsSnapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    setRatings(ratingsList);
+  };
+
+  useEffect(() => {
+    fetchProjects();
+    fetchCriteria();
+    fetchRatings();
+  }, []);
+
+  // Function to calculate scores for a project
   const getProjectScores = (projectId: string) => {
-    const projectScores = scores.filter((s) => s.projectId === projectId);
-    const totalScore = projectScores.reduce((acc, curr) => acc + curr.score, 0);
-    const averageScore = totalScore / (projectScores.length || 1);
+    const projectRatings = ratings.filter((r) => r.projectId === projectId);
+
+    const totalScore = projectRatings.reduce((acc, curr) => acc + curr.score, 0);
+    const averageScore = totalScore / (projectRatings.length || 1);
+
+    const breakdown = criteria.map((criterion) => {
+      const criterionRatings = projectRatings.filter(
+        (r) => r.criterionId === criterion.id
+      );
+      const totalCriterionScore = criterionRatings.reduce(
+        (acc, curr) => acc + curr.score,
+        0
+      );
+      const averageCriterionScore =
+        totalCriterionScore / (criterionRatings.length || 1);
+
+      return {
+        name: criterion.name,
+        score: averageCriterionScore.toFixed(1),
+        total: totalCriterionScore,
+        individualScores: criterionRatings.map((r) => r.score),
+      };
+    });
+
     return {
       total: totalScore,
       average: averageScore.toFixed(1),
-      breakdown: criteria.map((criterion) => {
-        const criterionScores = projectScores.filter(
-          (s) => s.criterionId === criterion.id
-        );
-        const avg =
-          criterionScores.reduce((acc, curr) => acc + curr.score, 0) /
-          (criterionScores.length || 1);
-        return {
-          name: criterion.name,
-          score: avg.toFixed(1),
-        };
-      }),
+      breakdown,
     };
   };
 
+  // Sort projects by average score
   const sortedProjects = [...projects].sort((a, b) => {
     const aScore = getProjectScores(a.id).average;
     const bScore = getProjectScores(b.id).average;
