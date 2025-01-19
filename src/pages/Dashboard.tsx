@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Award, Users, Trophy } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { JudgeService } from '../services/judgeSevice'; // Import JudgeService
+import { JudgeService } from '../services/judgeService'; // Import JudgeService
 
 export function Dashboard() {
   const [projects, setProjects] = useState([]);
