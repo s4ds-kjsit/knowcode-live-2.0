@@ -2,7 +2,16 @@ import React, { useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { Timer } from "lucide-react";
 import { db, auth } from "../firebase"; // Import auth from your Firebase config
-import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  getDoc,
+  doc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 export function Judging() {
   const [projects, setProjects] = useState([]);
@@ -11,13 +20,16 @@ export function Judging() {
   const [timer, setTimer] = useState<number | null>(null);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [judgeEmail, setJudgeEmail] = useState<string | null>(null);
+  const [filter, setFilter] = useState("notJudged");
 
   const criteria = [
-    { id: "1", name: "Impact", maxScore: 20, description: "How impactful is the project on its target audience?" },
-    { id: "2", name: "Innovation", maxScore: 20, description: "How innovative is the project compared to existing solutions?" },
-    { id: "3", name: "Feasibility", maxScore: 20, description: "How feasible is the project to implement in the real world?" },
-    { id: "4", name: "Presentation", maxScore: 20, description: "How well was the project presented?" },
+    { id: "1", name: "Impact", maxScore: 10, description: "How impactful is the project on its target audience?" },
+    { id: "2", name: "Innovation", maxScore: 10, description: "How innovative is the project compared to existing solutions?" },
+    { id: "3", name: "Feasibility", maxScore: 10, description: "How feasible is the project to implement in the real world?" },
+    { id: "4", name: "Presentation", maxScore: 10, description: "How well was the project presented?" },
   ];
+
+  const totalJudges = 3; // Specify the total number of judges required for a project
 
   // Fetch authenticated user's email
   useEffect(() => {
@@ -31,16 +43,47 @@ export function Judging() {
     fetchUserEmail();
   }, []);
 
-  // Fetch projects from Firestore
+  // Fetch projects and their judging statuses
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         const projectCollection = collection(db, "projects");
         const projectSnapshot = await getDocs(projectCollection);
-        const projectList = projectSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+
+        const projectList = await Promise.all(
+          projectSnapshot.docs.map(async (doc) => {
+            const projectData = doc.data();
+            const ratingsCollection = collection(db, "ratings");
+            const ratingsQuery = query(ratingsCollection, where("projectId", "==", doc.id));
+            const ratingsSnapshot = await getDocs(ratingsQuery);
+
+            // Count ratings for each criterion by different judges
+            const ratingsByJudge = {};
+            ratingsSnapshot.forEach((ratingDoc) => {
+              const { criterionId, judgeEmail } = ratingDoc.data();
+              if (!ratingsByJudge[judgeEmail]) {
+                ratingsByJudge[judgeEmail] = new Set();
+              }
+              ratingsByJudge[judgeEmail].add(criterionId);
+            });
+
+            // Calculate project status
+            const judgesCompleted = Object.keys(ratingsByJudge).filter(
+              (judge) => ratingsByJudge[judge].size === criteria.length
+            ).length;
+
+            const isCompleted = judgesCompleted === totalJudges;
+            const isPartiallyJudged = judgesCompleted > 0 && judgesCompleted < totalJudges;
+
+            return {
+              id: doc.id,
+              title: projectData.title,
+              teamName: projectData.teamName,
+              status: isCompleted ? "completed" : isPartiallyJudged ? "partiallyJudged" : "notJudged",
+            };
+          })
+        );
+
         setProjects(projectList);
       } catch (error) {
         console.error("Error fetching projects:", error);
@@ -75,17 +118,24 @@ export function Judging() {
     if (!selectedProject || !judgeEmail) return;
 
     try {
-      const ratingsCollection = collection(db, "ratings");
-
-      // Save scores for each criterion
       for (const [criterionId, score] of Object.entries(scores)) {
-        await addDoc(ratingsCollection, {
+        const ratingDocRef = doc(db, "ratings", `${selectedProject}_${criterionId}_${judgeEmail}`);
+        const existingDoc = await getDoc(ratingDocRef);
+
+        // Overwrite or create a new document
+        await setDoc(ratingDocRef, {
           projectId: selectedProject,
           criterionId,
           score,
-          judgeEmail, // Use the authenticated user's email
+          judgeEmail,
           timestamp: serverTimestamp(),
         });
+
+        if (existingDoc.exists()) {
+          console.log(`Updated score for ${criterionId}`);
+        } else {
+          console.log(`Added score for ${criterionId}`);
+        }
       }
 
       console.log("Scores submitted successfully for project:", selectedProject);
@@ -98,6 +148,8 @@ export function Judging() {
     }
   };
 
+  const filteredProjects = projects.filter((project) => project.status === filter);
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900">Judge Projects</h1>
@@ -105,8 +157,22 @@ export function Judging() {
       {!selectedProject ? (
         <div className="mt-6">
           <h2 className="text-lg font-medium text-gray-900">Select a Project</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700">Filter Projects</label>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            >
+              <option value="notJudged">Not Judged</option>
+              <option value="partiallyJudged">Partially Judged</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredProjects.map((project) => (
               <div
                 key={project.id}
                 className="overflow-hidden rounded-lg bg-white shadow"
@@ -136,8 +202,7 @@ export function Judging() {
         <div className="mt-6">
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-900">
-              Judging:{" "}
-              {projects.find((p) => p.id === selectedProject)?.title}
+              Judging: {projects.find((p) => p.id === selectedProject)?.title}
             </h2>
             {timer !== null && (
               <div className="flex items-center space-x-2">
@@ -164,20 +229,26 @@ export function Judging() {
                 >
                   {criterion.name} (0-{criterion.maxScore})
                 </label>
-                <input
-                  type="number"
-                  id={criterion.id}
-                  min="0"
-                  max={criterion.maxScore}
-                  value={scores[criterion.id] || ""}
-                  onChange={(e) =>
-                    setScores({
-                      ...scores,
-                      [criterion.id]: Number(e.target.value),
-                    })
-                  }
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                />
+                <div className="mt-1 flex space-x-2">
+                  {Array.from({ length: criterion.maxScore + 1 }, (_, i) => (
+                    <label key={i}>
+                      <input
+                        type="radio"
+                        name={criterion.id}
+                        value={i}
+                        checked={scores[criterion.id] === i}
+                        onChange={() =>
+                          setScores({
+                            ...scores,
+                            [criterion.id]: i,
+                          })
+                        }
+                        className="mr-1"
+                      />
+                      {i}
+                    </label>
+                  ))}
+                </div>
               </div>
             ))}
 

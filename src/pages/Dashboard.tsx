@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Award, Users, Trophy } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
+import { JudgeService } from '../services/judgeSevice'; // Import JudgeService
 
 export function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [judges, setJudges] = useState([]);
   const [scores, setScores] = useState([]);
   const [user, setUser] = useState(null);
+
+  const judgeService = new JudgeService(); // Create an instance of JudgeService
 
   useEffect(() => {
     const fetchUser = () => {
@@ -37,20 +40,10 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
-    const fetchJudges = async () => {
-      try {
-        const judgeCollection = collection(db, 'judges');
-        const judgeSnapshot = await getDocs(judgeCollection);
-        const activeJudges = judgeSnapshot.docs
-          .map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }))
-          .filter((judge) => judge.active); // Only include active judges
-        setJudges(activeJudges);
-      } catch (error) {
-        console.error('Error fetching judges:', error);
-      }
+    // Use JudgeService to get judges
+    const fetchJudges = () => {
+      const allJudges = judgeService.getAllJudges();
+      setJudges(allJudges);
     };
 
     fetchJudges();
@@ -90,6 +83,16 @@ export function Dashboard() {
     }));
   };
 
+  const projectLookup = projects.reduce((acc, project) => {
+    acc[project.id] = project.title;
+    return acc;
+  }, {});
+
+  const judgeLookup = judges.reduce((acc, judge) => {
+    acc[judge.email] = judge.name;
+    return acc;
+  }, {});
+
   const evaluationsComplete = groupScoresByProject(scores).length;
 
   const stats = [
@@ -113,7 +116,21 @@ export function Dashboard() {
     },
   ];
 
-  const recentScores = groupScoresByProject(scores);
+  const recentScores = groupScoresByProject(scores).map((score) => {
+    const project = projects.find((p) => p.id === score.projectId);
+
+    // Gather evaluator names (instead of emails)
+    const evaluatorNames = scores
+      .filter((s) => s.projectId === score.projectId && s.judgeEmail) // Filter valid emails
+      .map((s) => judgeLookup[s.judgeEmail] || s.judgeEmail) // Map email to judge name using judgeLookup
+      .filter((name, index, self) => self.indexOf(name) === index); // Ensure unique names
+
+    return {
+      ...score,
+      projectTitle: project ? project.title : 'Unknown Project',
+      evaluatedBy: evaluatorNames.join(', ') || 'N/A', // Join judge names
+    };
+  });
 
   return (
     <div>
@@ -166,10 +183,13 @@ export function Dashboard() {
                 {recentScores.map((score) => (
                   <li key={score.projectId} className="py-4">
                     <p className="text-sm text-gray-900">
-                      Project Title: <span className="font-medium">{score.projectId}</span>
+                      Project Title: <span className="font-medium">{score.projectTitle}</span>
                     </p>
                     <p className="mt-1 text-sm text-gray-500">
                       Total Score: {score.totalScore} ({score.criteria} Criteria)
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Evaluated By: <span className="font-medium">{score.evaluatedBy}</span>
                     </p>
                   </li>
                 ))}
