@@ -14,7 +14,15 @@ import {
 } from "firebase/firestore";
 
 export function Judging() {
-  const [projects, setProjects] = useState([]);
+  interface Project {
+    id: string;
+    title: string;
+    teamName: string;
+    status: string;
+    projectUrl: string
+  }
+  
+  const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [timer, setTimer] = useState<number | null>(null);
@@ -53,12 +61,13 @@ export function Judging() {
         const projectList = await Promise.all(
           projectSnapshot.docs.map(async (doc) => {
             const projectData = doc.data();
+            
             const ratingsCollection = collection(db, "ratings");
             const ratingsQuery = query(ratingsCollection, where("projectId", "==", doc.id));
             const ratingsSnapshot = await getDocs(ratingsQuery);
 
             // Count ratings for each criterion by different judges
-            const ratingsByJudge = {};
+            const ratingsByJudge: Record<string, Set<string>> = {};
             ratingsSnapshot.forEach((ratingDoc) => {
               const { criterionId, judgeEmail } = ratingDoc.data();
               if (!ratingsByJudge[judgeEmail]) {
@@ -79,6 +88,7 @@ export function Judging() {
               id: doc.id,
               title: projectData.title,
               teamName: projectData.teamName,
+              projectUrl: projectData.projectAbstract,
               status: isCompleted ? "completed" : isPartiallyJudged ? "partiallyJudged" : "notJudged",
             };
           })
@@ -91,6 +101,7 @@ export function Judging() {
     };
 
     fetchProjects();
+    console.log(projects)
   }, []);
 
   const startTimer = () => {
@@ -200,20 +211,28 @@ export function Judging() {
         </div>
       ) : (
         <div className="mt-6">
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between space-x-4">
             <h2 className="text-lg font-medium text-gray-900">
-              Judging: {projects.find((p) => p.id === selectedProject)?.title}
-            </h2>
-            {timer !== null && (
-              <div className="flex items-center space-x-2">
-                <Timer className="h-5 w-5 text-gray-500" />
-                <span className="text-lg font-medium text-gray-900">
-                  {formatTime(timer)}
-                </span>
-              </div>
-            )}
-          </div>
+              {/* Judging: {projects.find((p) => p.id === selectedProject)?.title} */}
+              Judging: {projects.find((p) => p.id === selectedProject)?.teamName} 
 
+            </h2>
+            <div className="flex items-center space-x-2">
+              {timer !== null && (
+                <div className="flex items-center space-x-2">
+                  <Timer className="h-5 w-5 text-gray-500" />
+                  <span className="text-lg font-medium text-gray-900">
+                    {formatTime(timer)}
+                  </span>
+                </div>
+              )}
+              
+            </div>
+           
+          </div>
+          <div className="bg-green-600 rounded-lg p-3 mt-1 text-sm text-white max-w-[110px] mb-4">
+                <a href={`${projects.find(p => p.id === selectedProject)?.projectUrl}`} target="_blank">View Abstract</a>
+              </div>
           {!isTimerRunning && timer === null && (
             <Button onClick={startTimer} className="mb-6">
               Start Timer
