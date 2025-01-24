@@ -12,11 +12,11 @@ export interface Judge {
       // Initializing a list of judges
       this.judges = [
         { name: "Admin", email: "admin@mail.com" },
-        { name: "Judge 1", email: "judge1@knowcode.com" },
-        { name: "Judge 2", email: "judge2@knowcode.com" },
-        { name: "Judge 3", email: "judge3@knowcode.com" },
-        { name: "Judge 4", email: "judge4@knowcode.com" },
-        { name: "Judge 5", email: "judge5@knowcode.com" },
+        { name: "Het Vikram", email: "het@s4ds.com" },
+        { name: "Lekhraj Varshney", email: "lekhraj@s4ds.com" },
+        { name: "Rakesh Kumawat", email: "rakesh@s4ds.com" },
+        { name: "Nitesh Mishra", email: "nitesh@s4ds.com" },
+        { name: "Indranil", email: "indranil@s4ds.com" },
       ];
     }
   
