@@ -11,7 +11,7 @@ export interface Judge {
     constructor() {
       // Initializing a list of judges
       this.judges = [
-        { name: "Admin", email: "admin@mail.com" },
+        
         { name: "Het Vikram", email: "het@s4ds.com" },
         { name: "Lekhraj Varshney", email: "lekhraj@s4ds.com" },
         { name: "Rakesh Kumawat", email: "rakesh@s4ds.com" },
